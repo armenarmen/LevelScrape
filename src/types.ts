@@ -125,4 +125,8 @@ export interface BrowserState {
   status: "down" | "starting" | "up";
   launchedAt: string | null;
   openPages: number;
+  strategy: string | null;     // which rung of the ladder is running (see src/environment.ts)
+  quality: string | null;      // best | good | poor | worst
+  note: string | null;
+  environment: string | null;  // one-line machine description
 }

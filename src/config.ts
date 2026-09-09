@@ -31,7 +31,8 @@ export interface Config {
 
   windowSize: { width: number; height: number };
   profileDir: string;
-  headless: boolean;
+  /** auto = detect the machine and pick the best available setup; or force one strategy. */
+  browserMode: "auto" | "headful-chrome" | "xvfb-chrome" | "headless-chrome" | "headful-chromium" | "xvfb-chromium" | "headless-chromium";
 
   logRetentionDays: number;
 
@@ -110,8 +111,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
     windowSize: { width: w, height: h },
     profileDir: str(env, "PROFILE_DIR", "./data/profile"),
-    // Exists only for experiments. Headless is exactly what gets detected.
-    headless: bool(env, "HEADLESS", false),
+    browserMode: (() => {
+      const m = str(env, "BROWSER_MODE", "auto");
+      const ok = ["auto", "headful-chrome", "xvfb-chrome", "headless-chrome", "headful-chromium", "xvfb-chromium", "headless-chromium"];
+      if (!ok.includes(m)) throw new Error(`Config: BROWSER_MODE must be one of ${ok.join(", ")}`);
+      return m as Config["browserMode"];
+    })(),
 
     logRetentionDays: num(env, "LOG_RETENTION_DAYS", 14),
 

@@ -235,25 +235,36 @@ spread of successful queries with `/fetch?format=meta` and judges whether each p
 Baseline from 2026-09-09 on a home IP: 94/100 first pass, 100/100 with retries; Google serves a captcha after
 roughly 40 consecutive queries at 30 s pacing, and a 5 minute cooldown clears it.
 
-## Deploying to a VPS (phase 2)
-
-A server has no screen, so Chrome draws into Xvfb, a fake monitor. Everything is in `deploy/`:
+## Throwing it on a box (Ubuntu VPS or any Linux server)
 
 ```bash
-# on the VPS, as root
-TZ_NAME=America/New_York bash deploy/setup-ubuntu.sh    # Node 22, real Chrome, Xvfb, fonts, `scraper` user
-# then follow the printed steps: copy project, npm ci && npm run build, create .env, systemctl enable --now levels-scraper
+# as root on Ubuntu 22.04 / 24.04 (x86_64; Google has no Chrome for ARM)
+git clone https://github.com/armenarmen/LevelScrape.git /opt/levelscrape
+TZ_NAME=America/New_York bash /opt/levelscrape/deploy/setup-ubuntu.sh   # Node 22, Google Chrome, Xvfb, fonts, `scraper` user, systemd unit
+cd /opt/levelscrape && npm ci && npm run build && chown -R scraper:scraper .
+cp .env.example .env && sed -i "s/^API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
+sudo -u scraper npm run doctor          # expect: -> xvfb-chrome [best]
+systemctl enable --now levelscrape && journalctl -fu levelscrape
 ```
 
-Notes for the VPS:
+Then from any of your projects, replace the Scrapingbee calls:
 
-- Set `CAPTCHA_MANUAL_SOLVE=0` there. Nobody can see the window. (If you want to, `x11vnc -display :99` lets you.)
-- Keep `HOST=127.0.0.1` and put Caddy / nginx / a Cloudflare Tunnel in front for HTTPS.
+```bash
+curl -H "x-api-key: $KEY" "http://127.0.0.1:3456/search?q=best+hot+springs+in+nevada"
+curl -H "x-api-key: $KEY" "http://127.0.0.1:3456/fetch?url=https://example.com&format=markdown"
+```
+
+Notes for a server:
+
 - **Expect a datacenter IP to get blocked within hours.** That's normal; Levels hit the same wall. The cache and pacing
-  buy time, but the real fix is `PROXY_URL` pointing at a residential proxy whose country matches `GOOGLE_GL`.
-- An always-on Mac (like a Mac mini) is honestly a better host than a VPS: real GPU, real fonts, residential IP,
-  and you can solve captchas.
-- Chrome updates are held (`apt-mark hold`). To update: `apt-mark unhold google-chrome-stable && apt upgrade && systemctl restart levels-scraper`.
+  buy time, but the real fix is `PROXY_URL` pointing at a residential proxy whose country matches `GOOGLE_GL` (and
+  `PROXY_TZ`/`PROXY_LOCALE` set to match). Use `/stats` to watch the success rate.
+- The API binds to `127.0.0.1`. To reach it from other machines, put a Cloudflare Tunnel, Tailscale, or Caddy with
+  HTTPS in front rather than setting `HOST=0.0.0.0` on a public interface.
+- A home machine (an always-on Mac mini, an old laptop) beats a VPS for Google: residential IP, real GPU, real fonts,
+  and you can solve a captcha in the window. Tailscale makes it reachable from anywhere.
+- Chrome updates are held (`apt-mark hold`). To update: `apt-mark unhold google-chrome-stable && apt upgrade && systemctl restart levelscrape`.
+- Want to watch the invisible screen? `x11vnc -display :99` on the box, over Tailscale.
 
 ## License
 

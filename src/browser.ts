@@ -8,6 +8,8 @@ import type { Config } from "./config.js";
 import type { BrowserState } from "./types.js";
 import { sleep } from "./humanize.js";
 import { log } from "./logger.js";
+import { chooseStrategies, describeEnvironment, detectEnvironment, type Strategy } from "./environment.js";
+import { startXvfb, stopXvfb } from "./xvfb.js";
 
 let cfg: Config;
 let context: BrowserContext | null = null;
@@ -16,6 +18,8 @@ let launching: Promise<BrowserContext> | null = null;
 let launchedAt: string | null = null;
 let consecutiveLaunchFailures = 0;
 let closingOnPurpose = false;
+let active: Strategy | null = null;
+let envDescription: string | null = null;
 
 export function initBrowser(config: Config): void {
   cfg = config;
@@ -53,25 +57,50 @@ export function cleanStaleLocks(profileDir: string): void {
   }
 }
 
-async function launch(): Promise<BrowserContext> {
-  mkdirSync(cfg.profileDir, { recursive: true });
-  cleanStaleLocks(cfg.profileDir);
+/**
+ * Anti-detection script, used ONLY for the Playwright-Chromium fallbacks. Real Chrome
+ * needs none of this and spoofing it would only create contradictions.
+ */
+const CHROMIUM_STEALTH = () => {
+  Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
+  const w = window as unknown as { chrome?: Record<string, unknown> };
+  if (!w.chrome) w.chrome = { runtime: {} };
+  else if (!w.chrome.runtime) w.chrome.runtime = {};
+  Object.defineProperty(navigator, "plugins", {
+    get: () => {
+      const p = [
+        { name: "PDF Viewer", filename: "internal-pdf-viewer", description: "Portable Document Format" },
+        { name: "Chrome PDF Viewer", filename: "internal-pdf-viewer", description: "Portable Document Format" },
+        { name: "Chromium PDF Viewer", filename: "internal-pdf-viewer", description: "Portable Document Format" },
+      ];
+      (p as unknown as { length: number }).length = 3;
+      return p;
+    },
+  });
+  const originalQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+  window.navigator.permissions.query = (parameters: PermissionDescriptor) =>
+    parameters.name === "notifications" ? Promise.resolve({ state: Notification.permission } as PermissionStatus) : originalQuery(parameters);
+};
 
+function safeBundledChromium(): string | null {
+  try {
+    return chromium.executablePath();
+  } catch {
+    return null;
+  }
+}
+
+async function launchWith(s: Strategy, userAgent?: string): Promise<BrowserContext> {
+  cleanStaleLocks(cfg.profileDir);
   const { width, height } = cfg.windowSize;
   const opts: NonNullable<Parameters<typeof chromium.launchPersistentContext>[1]> = {
-    // Use the Google Chrome that is installed on this machine, not Playwright's
-    // bundled Chromium. Real Chrome has a real fingerprint; that is the whole trick.
-    channel: "chrome",
-    headless: cfg.headless,
+    headless: s.headless,
     // null = let the actual window size be the viewport. Playwright's default
     // (a fixed 1280x720 emulated viewport) makes screen/inner/outer sizes all
     // identical, which is a well known automation tell.
     viewport: null,
-    args: [
-      "--disable-blink-features=AutomationControlled",
-      `--window-size=${width},${height}`,
-      "--window-position=0,0",
-    ],
+    args: ["--disable-blink-features=AutomationControlled", `--window-size=${width},${height}`, "--window-position=0,0"],
     // Playwright adds --enable-automation by default, which sets
     // navigator.webdriver = true and shows the "controlled by automated software"
     // bar. Remove just that one flag. Never pass ignoreDefaultArgs: true.
@@ -81,6 +110,12 @@ async function launch(): Promise<BrowserContext> {
     handleSIGTERM: false,
     handleSIGHUP: false,
   };
+  // Headless has no real monitor and reports an 800x600 screen, smaller than our window.
+  // Give it a believable one.
+  if (s.headless) opts.args!.push(`--screen-info={${Math.max(1920, width)}x${Math.max(1080, height)}}`);
+  if (s.executablePath) opts.executablePath = s.executablePath; // real Google Chrome
+  else if (s.channel) opts.channel = s.channel;                 // Playwright's Chromium (new headless when headless)
+  if (userAgent) opts.userAgent = userAgent;
 
   if (cfg.proxyUrl) {
     opts.proxy = parseProxyUrl(cfg.proxyUrl);
@@ -91,23 +126,73 @@ async function launch(): Promise<BrowserContext> {
     if (cfg.proxyTz) opts.timezoneId = cfg.proxyTz;
   }
 
-  log.info(`launching Chrome (channel=chrome, headless=${cfg.headless}, profile=${cfg.profileDir}${cfg.proxyUrl ? ", proxy=on" : ""})`);
   const ctx = await chromium.launchPersistentContext(cfg.profileDir, opts);
+  if (s.stealth) await ctx.addInitScript(CHROMIUM_STEALTH);
 
   // A persistent context starts with one about:blank tab. If the LAST tab is
   // closed, Chrome exits. So we pin this tab and never close it; every job gets
   // its own fresh tab via withPage().
-  keepAlive = ctx.pages()[0] ?? (await ctx.newPage());
+  const first = ctx.pages()[0] ?? (await ctx.newPage());
 
-  ctx.on("close", () => {
-    if (closingOnPurpose) log.info("browser closed");
-    else log.warn("browser context closed unexpectedly; will relaunch on next job");
-    context = null;
-    keepAlive = null;
-    launchedAt = null;
-  });
-
+  // Old-style headless announces itself in the user agent. If that happened, relaunch
+  // with the word removed; nothing else about the UA changes.
+  if (s.headless && !userAgent) {
+    const ua = await first.evaluate(() => navigator.userAgent).catch(() => "");
+    if (/HeadlessChrome/.test(ua)) {
+      await ctx.close();
+      log.warn(`${s.name}: user agent was "${ua.slice(0, 60)}..."; relaunching with "Headless" removed`);
+      return launchWith(s, ua.replace("HeadlessChrome", "Chrome"));
+    }
+  }
+  keepAlive = first;
   return ctx;
+}
+
+async function launch(): Promise<BrowserContext> {
+  mkdirSync(cfg.profileDir, { recursive: true });
+  const env = detectEnvironment({ chromiumPath: safeBundledChromium() });
+  envDescription = describeEnvironment(env);
+  log.info(`environment: ${envDescription}`);
+  for (const n of env.notes) log.warn(`environment: ${n}`);
+
+  const ladder = chooseStrategies(env, cfg.browserMode);
+  if (ladder.length === 0) {
+    throw new Error(
+      cfg.browserMode === "auto"
+        ? `no usable browser on this machine (${envDescription}). Install Google Chrome; on a Linux server without a monitor also install Xvfb.`
+        : `BROWSER_MODE=${cfg.browserMode} is not possible here (${envDescription}). Use BROWSER_MODE=auto or run "npm run doctor".`,
+    );
+  }
+
+  let lastErr: unknown = null;
+  for (const s of ladder) {
+    try {
+      if (s.needsXvfb && env.xvfbPath) await startXvfb(env.xvfbPath, cfg.windowSize.width, cfg.windowSize.height);
+      log.info(`launching ${s.name}: ${s.note}${cfg.proxyUrl ? " (proxy on)" : ""}`);
+      const ctx = await launchWith(s);
+      active = s;
+      if (s.quality === "poor" || s.quality === "worst") {
+        log.warn("=================================================================");
+        log.warn(` Running on ${s.name}. ${s.note}`);
+        log.warn("=================================================================");
+      }
+      ctx.on("close", () => {
+        if (closingOnPurpose) log.info("browser closed");
+        else log.warn("browser context closed unexpectedly; will relaunch on next job");
+        context = null;
+        keepAlive = null;
+        launchedAt = null;
+        active = null;
+      });
+      return ctx;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message.split("\n")[0] : String(err);
+      log.warn(`${s.name} failed to launch: ${msg}`);
+      if (s.needsXvfb) stopXvfb();
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 export async function getContext(): Promise<BrowserContext> {
@@ -176,14 +261,21 @@ export async function withPage<T>(
 }
 
 export function browserState(): BrowserState {
+  const base = {
+    strategy: active?.name ?? null,
+    quality: active?.quality ?? null,
+    note: active?.note ?? null,
+    environment: envDescription,
+  };
   if (context) {
-    return {
-      status: "up",
-      launchedAt,
-      openPages: Math.max(0, context.pages().length - (keepAlive ? 1 : 0)),
-    };
+    return { status: "up", launchedAt, openPages: Math.max(0, context.pages().length - (keepAlive ? 1 : 0)), ...base };
   }
-  return { status: launching ? "starting" : "down", launchedAt: null, openPages: 0 };
+  return { status: launching ? "starting" : "down", launchedAt: null, openPages: 0, ...base };
+}
+
+/** True when a human could actually see and interact with the browser window. */
+export function hasVisibleWindow(): boolean {
+  return active?.name === "headful-chrome" || active?.name === "headful-chromium";
 }
 
 export async function closeBrowser(): Promise<void> {
@@ -196,4 +288,5 @@ export async function closeBrowser(): Promise<void> {
     // process instead leaves half-written SQLite journals in the profile.
     await ctx.close().catch((e) => log.warn(`error closing browser: ${String(e)}`));
   }
+  stopXvfb();
 }

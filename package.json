@@ -12,7 +12,8 @@
     "start": "node dist/index.js",
     "search": "tsx src/cli.ts",
     "test": "node --import tsx --test test/*.test.ts",
-    "mcp": "node dist/mcp.js"
+    "mcp": "node dist/mcp.js",
+    "doctor": "tsx src/doctor.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",

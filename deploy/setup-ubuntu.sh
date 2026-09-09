@@ -5,7 +5,7 @@
 # "headful" on a server with no screen), fonts, and creates the `scraper` user.
 set -euo pipefail
 
-APP_DIR=/opt/levels-scraper
+APP_DIR=/opt/levelscrape
 TZ_NAME="${TZ_NAME:-America/New_York}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -40,17 +40,16 @@ id -u scraper >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbi
 mkdir -p "$APP_DIR"
 chown -R scraper:scraper "$APP_DIR"
 
-install -m 644 "$HERE/xvfb@.service" /etc/systemd/system/xvfb@.service
-install -m 644 "$HERE/levels-scraper.service" /etc/systemd/system/levels-scraper.service
+install -m 644 "$HERE/levelscrape.service" /etc/systemd/system/levelscrape.service
 systemctl daemon-reload
-systemctl enable --now xvfb@:99.service
 
 cat <<MSG
 
 Done. Next steps:
-  1. Copy the project to $APP_DIR (rsync -a --exclude node_modules --exclude data . root@vps:$APP_DIR/)
+  1. git clone https://github.com/armenarmen/LevelScrape.git $APP_DIR   (or rsync your copy)
   2. cd $APP_DIR && npm ci && npm run build && chown -R scraper:scraper $APP_DIR
-  3. Create $APP_DIR/.env from .env.example. On a VPS set CAPTCHA_MANUAL_SOLVE=0 and keep HOST=127.0.0.1
-     (put Caddy/nginx/Cloudflare Tunnel in front if other machines need to reach it).
-  4. systemctl enable --now levels-scraper && journalctl -fu levels-scraper
+  3. cp .env.example .env and set API_KEY (openssl rand -hex 32). Keep HOST=127.0.0.1 and put a
+     Cloudflare Tunnel / Tailscale / Caddy in front if other machines need to reach it.
+  4. sudo -u scraper npm run doctor      # shows what was detected; expect "xvfb-chrome"
+  5. systemctl enable --now levelscrape && journalctl -fu levelscrape
 MSG

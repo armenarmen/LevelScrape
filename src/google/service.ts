@@ -4,7 +4,7 @@ import { join } from "path";
 import type { Page } from "playwright";
 import type { Config } from "../config.js";
 import type { SearchOutcome, SearchParams, SearchResponse } from "../types.js";
-import { JobTimeoutError, withPage, type JobControl } from "../browser.js";
+import { JobTimeoutError, hasVisibleWindow, withPage, type JobControl } from "../browser.js";
 import { TtlLru, coalesce, searchCacheKey } from "../cache.js";
 import { log, logRequest } from "../logger.js";
 import { PacedSerialQueue } from "../queue.js";
@@ -75,7 +75,8 @@ export function createSearchService(cfg: Config): SearchService {
   const policy = new BlockPolicy();
 
   async function onCaptcha(page: Page, ctl: JobControl): Promise<boolean> {
-    if (!cfg.captchaManualSolve) return false;
+    // Waiting for a human only makes sense when there is a window a human can see.
+    if (!cfg.captchaManualSolve || !hasVisibleWindow()) return false;
     log.warn("=================================================================");
     log.warn(" CAPTCHA from Google. Solve it in the Chrome window that just came");
     log.warn(` to the front. Waiting up to ${Math.round(cfg.captchaWaitMs / 60_000)} min. Queue is paused.`);

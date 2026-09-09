@@ -23,6 +23,11 @@ hits Google. Ask, or describe what to run, rather than running `npm run dev`, `n
 
 ## Things that are easy to get wrong
 
+- **Browser setup is chosen at runtime** (`src/environment.ts` → `chooseStrategies`, `src/browser.ts` → `launch`).
+  The ladder is headful real Chrome → real Chrome on auto-started Xvfb → real Chrome new headless → Playwright
+  Chromium variants. Playwright Chromium is the bottom for a reason: Google detects it instantly. Do not reorder.
+  `BROWSER_MODE` forces a rung; `npm run doctor` shows detection. The Chromium rungs are the only place the
+  anti-detection init script is used.
 - **Anti-detection is the point.** Real Chrome, headful, `viewport: null`, no user-agent override, no
   fingerprint-spoofing init script, one Google hit every ~30 s with jitter, 24 h cache. Before making anything
   faster, more regular, or "more stealthy" via spoofing, assume the current choice is deliberate (README has the
@@ -87,4 +92,5 @@ hits Google. Ask, or describe what to run, rather than running `npm run dev`, `n
 - Live fixture: `test/fixtures/serp-live-2026-09-09.html`.
 - Scale: `/fetch?format=meta` verified on 7 third-party pages (WordPress, Webflow, Shopify, Facebook, Instagram).
 - No proxy configured. Add `PROXY_URL` only when `/stats` shows the success rate dropping.
-- `deploy/` (Ubuntu setup script + two systemd units) is written but untested on a real VPS.
+- `deploy/` (Ubuntu setup script + one systemd unit; the app starts Xvfb itself) is written but untested on a
+  real VPS. Headless rungs verified on the Mac via `npm run doctor -- --launch`.

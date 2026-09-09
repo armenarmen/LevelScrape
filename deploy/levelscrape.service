@@ -1,0 +1,28 @@
+# systemd unit for LevelScrape. The app detects the machine itself: with Google Chrome
+# and Xvfb installed it starts its own virtual screen and runs real Chrome "headful";
+# with no Xvfb it falls back to Chrome's new headless mode. No separate Xvfb unit needed.
+[Unit]
+Description=LevelScrape (self-hosted Google SERP + fetch API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scraper
+Group=scraper
+WorkingDirectory=/opt/levelscrape
+EnvironmentFile=/opt/levelscrape/.env
+Environment=LANG=en_US.UTF-8
+Environment=DBUS_SESSION_BUS_ADDRESS=/dev/null
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=10
+# SIGTERM must reach node directly (no shell wrapper) so Chrome's profile is closed cleanly.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

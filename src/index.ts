@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { join } from "path";
-import { closeBrowser, getContext, initBrowser, withPage } from "./browser.js";
+import { browserState, closeBrowser, getContext, initBrowser, withPage } from "./browser.js";
 import { loadConfig } from "./config.js";
 import { createSearchService } from "./google/service.js";
 import { warmup } from "./google/search.js";
@@ -34,6 +34,8 @@ async function main(): Promise<void> {
   const app = createApp({ cfg, searchService, fetchQueue });
   const server = app.listen(cfg.port, cfg.host, () => {
     log.info(`listening on http://${cfg.host}:${cfg.port}`);
+    const st = browserState();
+    if (st.strategy) log.info(`browser: ${st.strategy} (${st.quality})`);
     log.info(`pacing: one Google hit every ~${Math.round(cfg.googleMinIntervalMs / 1000)}s (+/- ${cfg.googleJitterPct}%), max ${cfg.googleDailyMax}/day`);
   });
   // A /search can legitimately wait a long time (queue + pacing + a human solving a
