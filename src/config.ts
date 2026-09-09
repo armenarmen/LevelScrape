@@ -23,6 +23,7 @@ export interface Config {
   queueMaxPending: number;
   searchTimeoutMs: number;
   fetchTimeoutMs: number;
+  scenarioTimeoutMs: number;   // extra budget when a js_scenario is present
   fetchConcurrency: number;
 
   captchaManualSolve: boolean;
@@ -101,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     queueMaxPending: num(env, "QUEUE_MAX_PENDING", 20),
     searchTimeoutMs: num(env, "SEARCH_TIMEOUT_MS", 60_000),
     fetchTimeoutMs: num(env, "FETCH_TIMEOUT_MS", 45_000),
+    scenarioTimeoutMs: num(env, "SCENARIO_TIMEOUT_MS", 120_000),
     fetchConcurrency: num(env, "FETCH_CONCURRENCY", 2),
 
     captchaManualSolve: bool(env, "CAPTCHA_MANUAL_SOLVE", true),

@@ -8,6 +8,7 @@ import { BadParamsError, BadUrlError, assertPublicHttpUrl, fetchPage } from "./f
 import { BlockedError, ParseFailedError, type SearchService } from "./google/service.js";
 import { getStats, logRequest } from "./logger.js";
 import { ConcurrentQueue, DailyLimitError, QueueFullError } from "./queue.js";
+import { ScenarioError, validateScenario } from "./scenario.js";
 import type { FetchFormat, FetchMode, FetchParams } from "./types.js";
 
 export interface Deps {
@@ -71,6 +72,11 @@ export function parseFetchParams(src: Record<string, unknown>, cfg: Config): Fet
   if (aiExtractRules && (typeof aiExtractRules !== "object" || Array.isArray(aiExtractRules) || Object.keys(aiExtractRules).length === 0)) {
     throw new BadParamsError("ai_extract_rules must be a non-empty JSON object of field: description");
   }
+  const jsScenario = src.js_scenario === undefined ? undefined : typeof src.js_scenario === "string" ? (JSON.parse(src.js_scenario) as Record<string, unknown>) : (src.js_scenario as Record<string, unknown>);
+  if (jsScenario) {
+    const err = validateScenario(jsScenario);
+    if (err) throw new BadParamsError(`js_scenario: ${err}`);
+  }
   const aiQuery = src.ai_query === undefined ? undefined : String(src.ai_query);
   if (aiQuery !== undefined && (!aiQuery.trim() || aiQuery.length > 2000)) throw new BadParamsError("ai_query must be 1-2000 chars");
   if ((aiQuery || aiExtractRules) && !aiConfigured(cfg)) throw new AiNotConfiguredError();
@@ -103,6 +109,7 @@ export function parseFetchParams(src: Record<string, unknown>, cfg: Config): Fet
     extractRules,
     aiQuery,
     aiExtractRules,
+    jsScenario: jsScenario as FetchParams["jsScenario"],
   };
 }
 
@@ -193,6 +200,7 @@ export function createApp({ cfg, searchService, fetchQueue }: Deps): express.Exp
     const src: Record<string, unknown> = { ...req.query };
     if (src.extract_rules !== undefined) src.extract_rules = jsonParam(req, "extract_rules");
     if (src.ai_extract_rules !== undefined) src.ai_extract_rules = jsonParam(req, "ai_extract_rules");
+    if (src.js_scenario !== undefined) src.js_scenario = jsonParam(req, "js_scenario");
     await handleFetch(src, req, res);
   });
 
@@ -239,6 +247,10 @@ export function createApp({ cfg, searchService, fetchQueue }: Deps): express.Exp
     }
     if (err instanceof BadParamsError) {
       res.status(400).json({ error: "bad_params", message: err.message });
+      return;
+    }
+    if (err instanceof ScenarioError) {
+      res.status(422).json({ error: "scenario_failed", step: err.step });
       return;
     }
     if (err instanceof AiNotConfiguredError) {

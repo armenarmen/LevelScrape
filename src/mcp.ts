@@ -52,10 +52,14 @@ server.registerTool(
       format: z.enum(["markdown", "text", "html", "meta"]).optional(),
       mode: z.enum(["auto", "browser", "plain"]).optional(),
       wait_for: z.string().optional().describe("CSS selector to wait for (forces browser)"),
+      js_scenario: z
+        .object({ instructions: z.array(z.record(z.string(), z.unknown())), strict: z.boolean().optional() })
+        .optional()
+        .describe('Browser steps before reading, e.g. {"instructions":[{"infinite_scroll":{"delay":1000}}]} or [{"click":"#more"},{"wait":1000}]'),
     }),
   },
-  async ({ url, format, mode, wait_for }) => {
-    const r = await api("/fetch", { url, format: format ?? "markdown", mode, wait: wait_for });
+  async ({ url, format, mode, wait_for, js_scenario }) => {
+    const r = await api("/fetch", { url, format: format ?? "markdown", mode, wait: wait_for, js_scenario });
     return text(r.body);
   },
 );
@@ -70,10 +74,14 @@ server.registerTool(
       rules: z.record(z.string(), z.unknown()),
       mode: z.enum(["auto", "browser", "plain"]).optional(),
       wait_for: z.string().optional(),
+      js_scenario: z
+        .object({ instructions: z.array(z.record(z.string(), z.unknown())), strict: z.boolean().optional() })
+        .optional()
+        .describe('Browser steps before extracting, e.g. {"instructions":[{"infinite_scroll":{"delay":1000}}]} to load everything on a lazy page'),
     }),
   },
-  async ({ url, rules, mode, wait_for }) => {
-    const r = await api("/fetch", { url, extract_rules: rules, mode, wait: wait_for });
+  async ({ url, rules, mode, wait_for, js_scenario }) => {
+    const r = await api("/fetch", { url, extract_rules: rules, mode, wait: wait_for, js_scenario });
     return text(r.body);
   },
 );

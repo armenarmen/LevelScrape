@@ -6,6 +6,7 @@ import { extractPageMeta } from "../src/extract/meta.js";
 import { applyExtractRules, validateExtractRules } from "../src/extract/rules.js";
 import { domToText } from "../src/extract/text.js";
 import { judgeHtml } from "../src/plainfetch.js";
+import { validateScenario } from "../src/scenario.js";
 
 const HTML = `<!doctype html><html lang="en"><head><title>Shop  Socks</title>
 <meta name="description" content="Merino socks for hiking">
@@ -92,4 +93,13 @@ test("auto mode judge", () => {
   assert.equal(judgeHtml(200, "text/html", "<html><body><h1>Example Domain</h1><p>This domain is for use in examples.</p></body></html>").needsBrowser, false);
   assert.equal(judgeHtml(200, "application/json", '{"a":1}').needsBrowser, false);
   assert.equal(judgeHtml(200, "text/html", `<html><body><p>${"Real content. ".repeat(60)}</p></body></html>`).needsBrowser, false);
+});
+
+test("js_scenario validation", () => {
+  assert.equal(validateScenario({ instructions: [{ click: "#a" }, { wait: 500 }, { infinite_scroll: { delay: 800 } }, { fill: ["#q", "x"] }] }), null);
+  assert.match(validateScenario({ instructions: [] })!, /non-empty/);
+  assert.match(validateScenario({ instructions: [{ click: "#a", wait: 1 }] })!, /exactly one key/);
+  assert.match(validateScenario({ instructions: [{ teleport: "#a" }] })!, /unknown instruction/);
+  assert.match(validateScenario({ instructions: [{ wait: 99_999 }] })!, /0-35000/);
+  assert.match(validateScenario({ instructions: [{ fill: "#q" }] })!, /\[selector, text\]/);
 });

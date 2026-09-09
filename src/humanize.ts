@@ -52,11 +52,29 @@ export async function humanMouseMove(page: Page): Promise<void> {
   }
 }
 
+/** Wait until an element's position stops changing (smooth scrolling, layout shifts). */
+async function settle(el: ReturnType<Page["locator"]>, maxMs = 2000): Promise<void> {
+  let last = await el.boundingBox();
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    await sleep(120);
+    const now = await el.boundingBox();
+    if (last && now && Math.abs(now.y - last.y) < 1 && Math.abs(now.x - last.x) < 1) return;
+    last = now;
+  }
+}
+
 export async function humanClick(page: Page, selector: string): Promise<void> {
   const el = page.locator(selector).first();
   await el.waitFor({ state: "visible", timeout: 10_000 });
+  // A raw mouse click at coordinates outside the viewport hits nothing, so bring the
+  // element on screen first (Playwright's locator.click does this; page.mouse does not).
+  await el.scrollIntoViewIfNeeded().catch(() => {});
+  await settle(el);
   const box = await el.boundingBox();
-  if (!box) {
+  const vp = page.viewportSize();
+  const inView = box && (!vp || (box.y >= 0 && box.y + box.height <= vp.height && box.x >= 0 && box.x + box.width <= vp.width));
+  if (!box || !inView) {
     await el.click();
     return;
   }

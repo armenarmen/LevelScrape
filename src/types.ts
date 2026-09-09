@@ -81,6 +81,7 @@ export interface FetchParams {
   extractRules?: Record<string, unknown>;
   aiQuery?: string;
   aiExtractRules?: Record<string, unknown>;
+  jsScenario?: { instructions: Array<Record<string, unknown>>; strict?: boolean }; // forces browser
 }
 
 export interface FetchResult {
@@ -96,6 +97,7 @@ export interface FetchResult {
   meta?: PageMeta;
   extracted?: Record<string, unknown>;
   ai?: unknown;
+  scenario?: unknown;        // per-step results of js_scenario
   truncated: boolean;
   screenshot?: Buffer;
   elapsedMs: number;

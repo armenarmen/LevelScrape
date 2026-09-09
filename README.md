@@ -118,6 +118,7 @@ Status codes: `429 blocked` (Google showed a block page; `retryAfter` seconds an
 | `extract_rules` | | JSON of CSS selectors → structured JSON (below) |
 | `ai_query` | | A question about the page, answered by your LLM (requires `AI_*` config) |
 | `ai_extract_rules` | | `{field: "description"}` → JSON extracted by your LLM |
+| `js_scenario` | | Browser steps to run before reading the page (below; forces browser) |
 | `wait` | | CSS selector to wait for (forces browser) |
 | `wait_ms` | | Fixed delay after load, 0–35000 (forces browser) |
 | `wait_browser` | `domcontentloaded` | `load`, `domcontentloaded`, or `networkidle` |
@@ -141,6 +142,23 @@ and `output` (`text` | `html` | `inner_html` | `@attr` | nested rules). `@href` 
 curl -G -H "x-api-key: $KEY" http://localhost:3456/fetch \
   --data-urlencode "url=https://books.toscrape.com/" \
   --data-urlencode 'extract_rules={"books":{"selector":".product_pod","type":"list","output":{"title":{"selector":"h3 a","output":"@title"},"price":".price_color"}}}'
+```
+
+**`js_scenario`** (same shape as ScrapingBee's) runs interactions before extraction. Instructions: `click`, `wait` (ms),
+`wait_for`, `wait_for_and_click`, `scroll_x`, `scroll_y`, `fill` (`[selector, text]`), `press` (key), `evaluate` (JS, result
+returned), and `infinite_scroll` (`{ max_count, delay, end_click: { selector } }`), which scrolls to the bottom until the page
+stops growing, clicking a "Load more" element whenever one is visible. Per-step results come back in `scenario`.
+Requests with a scenario get `SCENARIO_TIMEOUT_MS` of extra time.
+
+```bash
+# A Shopify collection that shows 24 products and a "Load more" button: scroll + click until all 56 are on the page.
+curl -H "x-api-key: $KEY" -H "content-type: application/json" -X POST http://localhost:3456/fetch -d '{
+  "url": "https://www.smartwool.com/en-us/collections/womens-hiking-socks",
+  "wait": "h2.product-card__title",
+  "js_scenario": { "instructions": [ { "infinite_scroll": { "delay": 1500, "end_click": { "selector": "a.button--load-more" } } } ] },
+  "extract_rules": { "products": { "selector": ".product-card", "type": "list",
+    "output": { "name": "h2.product-card__title", "price": ".product-price__price-current", "url": { "selector": "a[href*=\"/products/\"]", "output": "@href" } } } }
+}'
 ```
 
 **`format=meta`** is the link-preview / SEO view: title, description, canonical, h1s, Open Graph, Twitter card, all meta tags,

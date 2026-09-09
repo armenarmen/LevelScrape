@@ -10,6 +10,7 @@ import { extractPageMeta } from "./extract/meta.js";
 import { applyExtractRules, type ExtractRules } from "./extract/rules.js";
 import { domToText } from "./extract/text.js";
 import { plainFetch } from "./plainfetch.js";
+import { runScenario, type JsScenario } from "./scenario.js";
 import type { FetchParams, FetchResult, PageMeta } from "./types.js";
 
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
@@ -71,6 +72,7 @@ export async function assertPublicHttpUrl(raw: string): Promise<URL> {
 
 /** Things only a real browser can do. */
 export function requiresBrowser(p: FetchParams): string | null {
+  if (p.jsScenario) return "js_scenario";
   if (p.screenshot) return "screenshot";
   if (p.wait) return "wait selector";
   if (p.waitMs) return "wait_ms";
@@ -127,6 +129,7 @@ async function browserFetch(p: FetchParams, cfg: Config, result: FetchResult): P
       if (p.wait) await page.waitForSelector(p.wait, { timeout: 20_000 });
       else if (waitUntil === "domcontentloaded") await page.waitForLoadState("load", { timeout: 10_000 }).catch(() => {});
       if (p.waitMs) await page.waitForTimeout(Math.min(p.waitMs, 35_000));
+      if (p.jsScenario) result.scenario = await runScenario(page, p.jsScenario as JsScenario);
 
       result.finalUrl = page.url();
       result.title = await page.title().catch(() => "");
@@ -164,7 +167,7 @@ async function browserFetch(p: FetchParams, cfg: Config, result: FetchResult): P
       }
       return html;
     },
-    { timeoutMs: cfg.fetchTimeoutMs, label: `fetch ${p.url}` },
+    { timeoutMs: cfg.fetchTimeoutMs + (p.jsScenario ? cfg.scenarioTimeoutMs : 0), label: `fetch ${p.url}` },
   );
 }
 

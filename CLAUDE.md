@@ -65,12 +65,17 @@ hits Google. Ask, or describe what to run, rather than running `npm run dev`, `n
 - **AI extraction is optional and provider-agnostic** (`src/ai.ts`, any OpenAI-compatible `/chat/completions`).
   Never hardcode a provider; the user plugs in `AI_BASE_URL`/`AI_API_KEY`/`AI_MODEL`.
 - **`src/mcp.ts` is a thin client of the HTTP API**, not a second implementation. Keep it that way.
+- **`humanClick` must scroll the target into view first.** `page.mouse.click` at coordinates outside the viewport hits
+  nothing and reports success; this cost an hour on the Smartwool "Load more" button. Playwright's `locator.click`
+  auto-scrolls, raw mouse clicks do not.
 
 ## Current state (Sept 2026)
 
 - ScrapingBee-parity pass done 2026-09-09: `extract_rules`, `format=markdown`, SERP extras (PAA, related, local pack,
   result count; ads/knowledge panel unverified), `mode=auto` plain-first fetching, optional AI extraction, MCP server,
   POST /fetch, full-page/element screenshots, `full_html` on /search. Default `GOOGLE_UDM` switched 14 → 0.
+  `js_scenario` (click/wait/scroll/fill/evaluate/infinite_scroll) added after; verified loading all 56 Smartwool
+  products via three "Load more" clicks.
 
 - **Benchmark 2026-09-09** (`scripts/benchmark.ts`, results in `data/exports/benchmark/`): 100 travel/purchase
   queries from the Mac's home IP at 30s pacing. 94/100 first pass, 100/100 after retrying the 6 that landed inside
