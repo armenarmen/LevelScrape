@@ -1,0 +1,13 @@
+# Fake monitor. Chrome runs "headful" into this invisible screen.
+# Depth MUST be 24 (16-bit breaks Chrome rendering). Size must match WINDOW_SIZE in .env.
+[Unit]
+Description=Xvfb virtual framebuffer on display %i
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/Xvfb %i -screen 0 1366x768x24 -nolisten tcp -ac
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

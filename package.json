@@ -1,0 +1,33 @@
+{
+  "name": "levelscrape",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LevelScrape: self-hosted Scrapingbee alternative. Google SERP + page fetch/extract API, Playwright driving real Google Chrome, headful, paced.",
+  "repository": "github:armenarmen/LevelScrape",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "search": "tsx src/cli.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "mcp": "node dist/mcp.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "playwright": "^1.63.0",
+    "turndown": "^7.2.4",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "@types/turndown": "^5.0.6",
+    "linkedom": "^0.18.13",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,29 @@
+# Why not `xvfb-run node ...`? xvfb-run is a bash wrapper, and bash holds onto
+# SIGTERM until its child exits, so node never gets the stop signal and Chrome's
+# profile never gets closed cleanly. Two units fixes that.
+[Unit]
+Description=levels-scraper (self-hosted Google SERP + fetch API)
+Requires=xvfb@:99.service
+After=network-online.target xvfb@:99.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scraper
+Group=scraper
+WorkingDirectory=/opt/levels-scraper
+EnvironmentFile=/opt/levels-scraper/.env
+Environment=DISPLAY=:99
+Environment=LANG=en_US.UTF-8
+Environment=DBUS_SESSION_BUS_ADDRESS=/dev/null
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target
