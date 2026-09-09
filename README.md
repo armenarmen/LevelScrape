@@ -1,6 +1,8 @@
 # LevelScrape
 
-A self-hosted replacement for Scrapingbee's two main jobs, built the way [Pieter Levels described](https://x.com/levelsio) replacing his $249/mo plan with a $1/mo scraper on a VPS:
+A self-hosted replacement for Scrapingbee's two main jobs. Inspired by
+[this tweet from Pieter Levels](https://x.com/levelsio/status/2097638309384036705), where he describes replacing
+his $249/mo Scrapingbee plan with a $1/mo scraper on his own VPS:
 
 1. **`/search`** – run a Google search, get the organic results back as JSON.
 2. **`/fetch`** – load any public URL in a real browser (JavaScript and all) and get the HTML or text back.
